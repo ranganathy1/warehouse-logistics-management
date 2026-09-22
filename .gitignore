@@ -1,0 +1,22 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node and build output
+node_modules/
+dist/
+dist-ssr/
+*.log
+npm-debug.log*
+
+# Editors and operating-system files
+.vscode/
+.idea/
+.DS_Store
