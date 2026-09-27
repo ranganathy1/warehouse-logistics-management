@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+
 from auth import (
     create_token,
     get_current_user,
