@@ -69,6 +69,16 @@ jobs:
           test -n "$AWS_REGION"
           test -n "$EKS_CLUSTER_NAME"
           test -n "$VITE_API_URL"
+      - name: Debug GitHub OIDC subject
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payload = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString()
+            );
+            console.log('OIDC sub:', payload.sub);
+            console.log('OIDC aud:', payload.aud);
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
