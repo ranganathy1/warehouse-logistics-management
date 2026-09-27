@@ -206,28 +206,7 @@ The frontend uses `http://localhost:8000` as its local API URL. Start both servi
 
 ### Cloud Deployment
 
-Deploy the frontend, FastAPI backend, and PostgreSQL database as separate services, or use a platform that supports all three. In the cloud backend environment, set:
-
-```env
-DB_URL=postgresql://user:password@cloud-db-host:5432/database
-JWT_SECRET_KEY=replace-with-a-long-random-secret
-```
-
-Start FastAPI with the platform-provided port:
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
-
-Update the frontend API base URL in `wlms-frontend/src/api/axios.js` to the public HTTPS backend URL, for example `https://wlms-api.example.com`. Add the deployed frontend origin to `allow_origins` in `backend/main.py`:
-
-```python
-allow_origins=[
-    "https://wlms.example.com",
-]
-```
-
-Do not use `localhost` or a private LAN address for a cloud database or public API. Do not use `--reload` in production.
+The repository includes Dockerfiles, a GitHub Actions CI/CD workflow, and Kubernetes manifests for EKS, ECR, an ALB, and an external RDS PostgreSQL database. Follow [DEPLOYMENT.md](DEPLOYMENT.md) for the AWS prerequisites, GitHub OIDC setup, runtime secrets, DNS, and first deployment. The frontend API URL and backend CORS origins are configured for production without changing the local development defaults.
 
 ### Default Users
 Create users via the API docs at `/docs` or directly in the database.

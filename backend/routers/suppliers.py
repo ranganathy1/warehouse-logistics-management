@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException,Depends
 from database import get_connection
 from schemas.supplier import SupplierResponse, SupplierCreate,SupplierUpdate
-from auth import get_current_user,require_admin,require_warehouse
+from auth import require_admin,require_warehouse
 import psycopg2
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])

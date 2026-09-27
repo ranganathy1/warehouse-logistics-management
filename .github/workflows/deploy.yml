@@ -1,0 +1,104 @@
+name: Build and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Python static analysis
+        working-directory: backend
+        run: ruff check .
+      - name: Run backend unit tests
+        working-directory: backend
+        run: python -m pytest -q
+  frontend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: wlms-frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: wlms-frontend
+        run: npm ci
+      - name: Lint frontend
+        working-directory: wlms-frontend
+        run: npm run lint
+      - name: Run frontend unit tests
+        working-directory: wlms-frontend
+        run: npm test
+      - name: Build frontend
+        working-directory: wlms-frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'http://localhost:8000' }}
+        run: npm run build
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [backend-checks, frontend-checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require deployment settings
+        run: |
+          test -n "$AWS_REGION"
+          test -n "$EKS_CLUSTER_NAME"
+          test -n "$VITE_API_URL"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build and push images
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/wlms-backend:$IMAGE_TAG" ./backend
+          docker build \
+            --build-arg VITE_API_URL="$VITE_API_URL" \
+            -t "$ECR_REGISTRY/wlms-frontend:$IMAGE_TAG" \
+            ./wlms-frontend
+          docker push "$ECR_REGISTRY/wlms-backend:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/wlms-frontend:$IMAGE_TAG"
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
+      - uses: imranismail/setup-kustomize@v2
+      - name: Apply Kubernetes manifests
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd k8s
+          kustomize edit set image \
+            wlms-backend="$ECR_REGISTRY/wlms-backend:$IMAGE_TAG" \
+            wlms-frontend="$ECR_REGISTRY/wlms-frontend:$IMAGE_TAG"
+          kustomize build . | kubectl apply -f -
+          kubectl rollout status deployment/wlms-backend -n wlms --timeout=180s
+          kubectl rollout status deployment/wlms-frontend -n wlms --timeout=180s
